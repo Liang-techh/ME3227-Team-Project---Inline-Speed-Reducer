@@ -1,4 +1,4 @@
-# ME3227 Team Project - Inline Speed Reducer
+#  Team Project - Inline Speed Reducer
 
 ## Project Files
 

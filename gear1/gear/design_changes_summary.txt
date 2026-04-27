@@ -1,0 +1,58 @@
+# Gearbox Design Changes Summary
+
+This document summarizes the modifications made to the MATLAB inline speed reducer design code to resolve safety factor failures in gears, shafts, bearings, and keys.
+
+## 1. Gear Design Modifications
+**Location:** `reducer_design.m` (Lines 85 - 106)
+
+*   **Stage 1 (High-Speed Stage):**
+    *   **Initial Data:** Module = 2.5 mm, Pinion Teeth = 20, Gear Teeth = 60, Face Widths = 25 mm / 30 mm
+    *   **Modified Data:** Module = 3.0 mm, Pinion Teeth = 25, Gear Teeth = 75, Face Widths = 35 mm / 40 mm
+    *   *Reason:* To increase bending and contact safety factors (SF, SH) above 1.0.
+
+*   **Stage 2 (Low-Speed Stage):**
+    *   **Initial Data:** Module = 3.0 mm, Pinion Teeth = 16, Gear Teeth = 48, Face Widths = 30 mm / 35 mm
+    *   **Modified Data:** Module = 4.0 mm, Pinion Teeth = 30, Gear Teeth = 90, Face Widths = 50 mm / 55 mm
+    *   *Reason:* The original Stage 2 gears were failing significantly under load (SF = 0.551). Increasing dimensions drastically reduces tangential forces and increases tooth strength.
+
+## 2. Shaft Diameter Modifications
+**Location:** `reducer_design.m` (Lines 121 - 165)
+
+All shaft diameters were uniformly scaled up to ensure the fatigue safety factors (DE-Goodman, n > 2.0) were met.
+
+*   **Shaft 1 (Input Shaft):**
+    *   **Initial Diameters:** `[15, 20, 20, 25, 20, 20, 15]`
+    *   **Modified Diameters:** `[25, 30, 30, 35, 30, 30, 25]`
+*   **Shaft 2 (Intermediate Shaft):**
+    *   **Initial Diameters:** `[25, 28, 28, 35, 38, 28, 35, 25, 22]`
+    *   **Modified Diameters:** `[40, 45, 45, 55, 60, 45, 55, 40, 40]`
+*   **Shaft 3 (Output Shaft):**
+    *   **Initial Diameters:** `[30, 35, 35, 42, 45, 35, 30, 28]`
+    *   **Modified Diameters:** `[45, 50, 50, 60, 65, 50, 45, 45]`
+
+*(Note: Related diameter parameters for stress concentration `sc_g`, `sc_c` (Lines 173-196) and key design (Lines 208-229) were also updated to match the new shaft geometries).*
+
+## 3. Bearing Bore Size Modifications
+**Location:** `reducer_design.m` (Lines 232 - 260)
+
+Bearing input bore sizes were matched to the newly enlarged shaft ends.
+
+*   **Shaft 1 Bearings:**
+    *   **Initial:** 15 mm bore
+    *   **Modified:** 25 mm bore
+*   **Shaft 2 Bearings:**
+    *   **Initial:** 20 mm bore (Wait, original input was 20mm/35mm mismatch, modified to strictly 40mm)
+    *   **Modified:** 40 mm bore
+*   **Shaft 3 Bearings:**
+    *   **Initial:** 25 mm bore
+    *   **Modified:** 45 mm bore
+
+## 4. Bearing Selection Logic Fix (Bug Fix)
+**Location:** `bearing_selection.m` (Lines 104 - 115, 153 - 160)
+
+*   **Initial Logic:** The `C10_required` calculation used the standard formula `C10_required = a_f * Fe * (x_D)^(1/a)`. This formula calculates the requirement for a basic L10 life (90% reliability), ignoring the target 99% reliability (`R_target = 0.99`). As a result, the code consistently selected bearings that were too small, resulting in "MARGINAL" reliability verdicts during the final check.
+*   **Modified Logic:** Integrated the Weibull parameters (`x0 = 0.02`, `theta = 4.439`, `beta = 1.483`) directly into the `C10_required` calculation:
+    `x_R = ((x_D - x0)/(theta - x0))^beta / (-log(R_target));`
+    `C10_required = a_f * Fe * x_R^(1/a);`
+    This ensures that the catalog lookup fetches a bearing physically rated for the 99% survival rate.
+*   **Error Prevention:** Added `bearing_results.is_adequate = false;` to the `isempty(selected)` conditional branch to prevent missing-field exceptions if no suitable bearing is found in the catalog.
